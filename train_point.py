@@ -181,8 +181,7 @@ optimizer = torch.optim.AdamW(list(model.parameters()), lr=1e-4, weight_decay=1e
 
 device = "cuda:0"
 
-epochs = 1
-
+epochs = args.epochs
 
 with wandb.init(project=project, config=config) as run:
     for e in range(epochs):
@@ -226,8 +225,8 @@ with wandb.init(project=project, config=config) as run:
             total_loss += loss.item()
             progress_bar.update(1)
             progress_bar.set_postfix({"Loss": total_loss/it})
-            break
-        #run.log({"loss": total_loss/it})
+            
+        run.log({"loss": total_loss/it})
 
         torch.save(model.state_dict(), f"checkpoints/{run.name[:-3]}_{e}.pth")
 
@@ -254,9 +253,9 @@ with wandb.init(project=project, config=config) as run:
 
                 progress_bar.update(1)
                 progress_bar.set_postfix({"Test Acc": correct/total})
-                break
+                
 
-        #run.log({"accuracy": correct/total})
+        run.log({"accuracy": correct/total})
                 
             
         print("Final Test Acc:", correct/total)
