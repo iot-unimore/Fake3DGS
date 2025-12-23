@@ -1,1 +1,1 @@
-# GaussianDiscriminator
+# Fake3DGS
