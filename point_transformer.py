@@ -99,6 +99,7 @@ class Point(Dict):
             # Adaptive measure the depth of serialization cube (length = 2 ^ depth)
             depth = int(self.grid_coord.max()).bit_length()
         self["serialized_depth"] = depth
+
         # Maximum bit length for serialization code is 63 (int64)
         assert depth * 3 + len(self.offset).bit_length() <= 63
         # Here we follow OCNN and set the depth limitation to 16 (48bit) for the point position.
@@ -963,7 +964,7 @@ class PointTransformerV3(PointModule):
                     )
                 self.dec.add(module=dec, name=f"dec{s}")
         
-        self.head = MLP(in_channels=384,hidden_channels = 128, out_channels=2)
+        self.head = MLP(in_channels=128,hidden_channels = 64, out_channels=2)
 
     def forward(self, data_dict):
         """

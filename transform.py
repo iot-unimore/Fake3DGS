@@ -344,8 +344,6 @@ class Collect(object):
         for name, keys in self.kwargs.items():
             name = name.replace("_keys", "")
             assert isinstance(keys, Sequence)
-            # for key_i in keys:
-            #     print(key_i, data_dict[key_i].shape)
             data[name] = torch.cat(
                 [data_dict[key].float() for key in keys], dim=1
             )  # feat_keys concat
@@ -419,8 +417,34 @@ class NormalizeColor(object):
             data_dict["color"] = data_dict["color"] / 127.5 - 1
         return data_dict
 
+@TRANSFORMS.register_module()
+class NormalizeScales(object):
+    def __call__(self, data_dict):
+        if "scale" in data_dict.keys():
+            scale = data_dict["scale"]
+            scale = scale - scale.mean(dim=0, keepdim=True)
+            scale = scale / (scale.std(dim=0, keepdim=True) + 1e-6)
+            data_dict["scale"] = scale
+
+        return data_dict
+
+
+
 
 @TRANSFORMS.register_module()
+class NormalizeOpacities(object):
+    def __call__(self, data_dict):
+        if "opacity" in data_dict.keys():
+            opacity = data_dict["opacity"]
+            opacity = opacity - opacity.mean(dim=0, keepdim=True)
+            opacity = opacity / (opacity.std(dim=0, keepdim=True) + 1e-6)
+            data_dict["opacity"] = opacity
+
+        return data_dict
+
+
+@TRANSFORMS.register_module()
+
 class NormalizeCoord(object):
     def __call__(self, data_dict):
         if "coord" in data_dict.keys():
@@ -429,8 +453,8 @@ class NormalizeCoord(object):
             data_dict["coord"] -= centroid
             m = np.max(np.sqrt(np.sum(data_dict["coord"] ** 2, axis=1)))
             data_dict["coord"] = data_dict["coord"] / m
-        if "scale" in data_dict.keys():
-            data_dict["scale"] = data_dict["scale"] / m
+        #if "scale" in data_dict.keys():
+        #    data_dict["scale"] = data_dict["scale"] / m
         return data_dict
 
 
@@ -534,6 +558,10 @@ class RandomDropout(object):
                 data_dict["scale"] = data_dict["scale"][idx]
             if "opacity" in data_dict.keys():
                 data_dict["opacity"] = data_dict["opacity"][idx]
+            if "sh" in data_dict.keys():
+                data_dict["sh"] = data_dict["sh"][idx]
+            if "s0" in data_dict.keys():
+                data_dict["s0"] = data_dict["s0"][idx]
             if "lang_feat" in data_dict.keys():
                 data_dict["lang_feat"] = data_dict["lang_feat"][idx]
             if "valid_feat_mask" in data_dict.keys():
@@ -1456,8 +1484,7 @@ class SphereCrop(object):
                     idx_crop = np.argsort(dist2)[:point_max]
 
                     data_crop_dict = dict()
-                    print("data_dict.keys()", data_dict.keys())
-
+                    
                     if "coord" in data_dict.keys():
                         data_crop_dict["coord"] = data_dict["coord"][idx_crop]
                     if "grid_coord" in data_dict.keys():

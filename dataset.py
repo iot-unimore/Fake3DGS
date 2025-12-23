@@ -5,7 +5,7 @@ from copy import deepcopy
 from torch.utils.data import Dataset
 from collections.abc import Sequence
 import joblib
-import torch
+import random
 from pointcept.utils.logger import get_root_logger
 from pointcept.utils.cache import shared_dict
 
@@ -30,7 +30,7 @@ class DefaultDataset(Dataset):
         data_root="gaussian_pickles/",
         transform=None,
         test_mode=False,
-        test_cfg=None,
+        configuration = "mixed_training.pkl",
         cache=False,
         ignore_index=-1,
         loop=1,
@@ -43,11 +43,11 @@ class DefaultDataset(Dataset):
         self.transform = Compose(transform)
         self.cache = cache
         self.ignore_index = ignore_index
+        self.configuration=configuration
         self.loop = (
             loop if not test_mode else 1
         )  # force make loop = 1 while in test mode
         self.test_mode = test_mode
-        self.test_cfg = test_cfg if test_mode else None
         self.sample_tail = sample_tail_classes
 
         if test_mode:
@@ -58,13 +58,20 @@ class DefaultDataset(Dataset):
             self.post_transform = Compose(self.test_cfg.post_transform)
             self.aug_transform = [Compose(aug) for aug in self.test_cfg.aug_transform]
 
-        self.data_list = self.get_data_list(filtered_scene=filtered_scene)
+        self.data_list = self.get_data_list2()
         logger = get_root_logger()
         logger.info(
             "Totally {} x {} samples in {} set.".format(
                 len(self.data_list), self.loop, split
             )
         )
+
+
+    def get_data_list2(self):
+
+        data_list = joblib.load(self.configuration)
+        
+        return data_list[self.split]
 
     def get_data_list(self, filtered_scene=None):
         if isinstance(self.split, str):
@@ -84,58 +91,50 @@ class DefaultDataset(Dataset):
         return data_list
 
     def get_data(self, idx):
+        
         #data_path = self.data_list[idx % len(self.data_list)]
-        data_path = os.path.join(self.data_root, self.split)
+        scene = self.data_list[idx]
+        data_path = os.path.join(self.data_root, scene)
         name = self.get_data_name(idx)
+        
         if self.cache:
             cache_name = f"pointcept-{name}"
             return shared_dict(cache_name)
 
-        data_dict = {}
-
-        if "fake" in name:
-            label = 1
-        else:   
-            label = 0
-
-        
-        
-        data = joblib.load(os.path.join(data_path, name))
+        data_dict = {}        
+        data = joblib.load(data_path)
     
-        
-        
-        #opacity = data["opacity"]
-
-        # ordina per opacità decrescente
-        #values, indices = np.sort(opacity)[::-1]
-
-        # prendi i primi 10k indici (se N >= 10000)
-        #topk_indices = indices[:10000]
+        """
+        opacity = data["opacity"]
+        k = 65536
+        topk_indices = np.argpartition(opacity, -k)[-k:]
 
         data_dict = {
-        "coord": data["coord"],
-        "color": data["color"],
-        "opacity": data["opacity"],
-        "quat": data["quat"],
-        "scale": data["scale"],
-        "label": label,
-        "name": name
-    }
-
-    
-    
-        """
-            data_dict = {
-            "coord": data["coord"][topk_indices],
-            "color": data["color"][topk_indices],
-            "opacity": data["opacity"][topk_indices],
-            "quat": data["quat"][topk_indices],
-            "scale": data["scale"][topk_indices],
-            "label": label,
-            "name": name
+        "coord": data["means"][topk_indices],
+        "opacity": data["opacity"][topk_indices][:,None],
+        "quat": data["quats"][topk_indices],
+        "scale": data["scales"][topk_indices],
+        "sh": data["sh"][topk_indices],
+        "label": data["label"]
         }
+        
         """
 
+        sh = data["sh"]
+        s0 = sh[:,0:3]
+        sh = sh[:,3:]
+
+        data_dict = {
+        "coord": data["means"],
+        "opacity": data["opacity"][:,None],
+        "quat": data["quats"],
+        "scale": data["scales"],
+        "s0": s0,
+        "sh": sh,
+        "label": data["label"]
+        }   
+        
+        
         if "coord" in data_dict.keys():
             data_dict["coord"] = data_dict["coord"].astype(np.float32)
 
@@ -166,9 +165,7 @@ class DefaultDataset(Dataset):
     def prepare_train_data(self, idx):
         # load data
         data_dict = self.get_data(idx)
-        label = data_dict["label"]
         data_dict = self.transform(data_dict)
-        data_dict["label"] = label
         return data_dict
 
     def prepare_test_data(self, idx):

@@ -4,6 +4,8 @@ from dataset import DefaultDataset
 from dataloader import point_collate_fn
 import torch.nn as nn
 from tqdm import tqdm
+import numpy as np
+import random
 import argparse
 from point_transformer import PointTransformerV3
 import wandb
@@ -11,14 +13,77 @@ import wandb
 print(f"Device: {torch.cuda.get_device_name(0)}")
 
 
+ablations = {
+    "wo_opacity": {
+        "feat": ("scale", "quat", "s0", "sh"),
+        "num_feat": 55
+    },
+    "wo_scale": {
+        "feat": ("opacity", "quat", "s0", "sh"),
+        "num_feat": 53
+    },
+    "wo_quat": {
+        "feat": ("opacity", "scale", "s0", "sh"),
+        "num_feat": 52
+    },
+    "wo_s0": {
+        "feat": ("opacity", "scale", "quat", "sh"),
+        "num_feat": 53
+    },
+    "wo_sh": {
+        "feat": ("opacity", "scale", "quat", "s0"),
+        "num_feat": 11
+    },
+    "only_s0": {
+        "feat": ("s0"),
+        "num_feat": 3
+    }
+}
+
+
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-bs","--batch_size", type=int, default=2)
 parser.add_argument("-e","--epochs", type=int, default=10)
+parser.add_argument("-r", "--resume", type=str, default=None, help="Path del checkpoint")
+parser.add_argument("-c", "--config", type=str, default="mixed_training.pkl", help="Experiment type")
+parser.add_argument("-n", "--name", type=str, default=None, help="Name of the run")
+parser.add_argument("-a", "--ablative", type=str, default=None )
+
+
+
+
 
 args = parser.parse_args()
 
+if args.ablative is not None:
+    features = ablations[args.ablative]["feat"]
+    num_feat = ablations[args.ablative]["num_feat"]
+else:
+    features = ("opacity", "scale", "quat", "s0", "sh")
+    num_feat = 56
+
+
+
 bs = args.batch_size
+print(f"Running  {args.name}")
+# set seed
+manualSeed = 1234
+random.seed(manualSeed)
+torch.manual_seed(manualSeed)
+np.random.seed(manualSeed)
+torch.cuda.manual_seed_all(manualSeed)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+torch.use_deterministic_algorithms(True)
+
+
+def seed_worker(worker_id):
+    worker_seed = manualSeed + worker_id
+    np.random.seed(worker_seed)
+    random.seed(worker_seed)
+    torch.manual_seed(worker_seed)
 
 project="fake_gaussian"
 config = {
@@ -31,46 +96,47 @@ config = {
 
 transform_train=[
             dict(type="CenterShift", apply_z=True),
-            #dict(
-            #    type="RandomDropout", dropout_ratio=0.2, dropout_application_ratio=0.2
-            #),
-            # dict(type="RandomRotateTargetAngle", angle=(1/2, 1, 3/2), center=[0, 0, 0], axis="z", p=0.75),
-            #dict(type="RandomRotate", angle=[-1, 1], axis="z", center=[0, 0, 0], p=0.5),
-            #dict(type="RandomRotate", angle=[-1 / 64, 1 / 64], axis="x", p=0.5),
-            #dict(type="RandomRotate", angle=[-1 / 64, 1 / 64], axis="y", p=0.5),
-            #dict(type="RandomScale", scale=[0.9, 1.1]),
-            # dict(type="RandomShift", shift=[0.2, 0.2, 0.2]),
+            dict(
+                type="RandomDropout", dropout_ratio=0.2, dropout_application_ratio=0.2
+            ),
+            dict(type="RandomRotateTargetAngle", angle=(1/2, 1, 3/2), center=[0, 0, 0], axis="z", p=0.75),
+            dict(type="RandomRotate", angle=[-1, 1], axis="z", center=[0, 0, 0], p=0.5),
+            dict(type="RandomRotate", angle=[-1 / 64, 1 / 64], axis="x", p=0.5),
+            dict(type="RandomRotate", angle=[-1 / 64, 1 / 64], axis="y", p=0.5),
+            dict(type="RandomShift", shift=[[-0.2, 0.2], [-0.2, 0.2], [0, 0]]),
             #dict(type="RandomFlip", p=0.5),
             #dict(type="RandomJitter", sigma=0.005, clip=0.01),
             #dict(type="ElasticDistortion", distortion_params=[[0.2, 0.4], [0.8, 1.6]]),
             #dict(type="ChromaticAutoContrast", p=0.2, blend_factor=None),
-            #dict(type="ChromaticTranslation", p=0.95, ratio=0.05),
+            #dict(type="ChromaticTranslation", p=0.95, ratio=0.1),
             #dict(type="ChromaticJitter", p=0.95, std=0.05),
-            # dict(type="HueSaturationTranslation", hue_max=0.2, saturation_max=0.2),
-            # dict(type="RandomColorDrop", p=0.2, color_augment=0.0),
-            dict(
-                type="GridSample",
-                grid_size=0.015,
-                hash_type="fnv",
-                mode="train",
-                keys=(
-                    "coord",
-                    "color",
-                    "opacity",
-                    "quat",
-                    "scale",
-                    "segment",
-                    "lang_feat",
-                    "valid_feat_mask",
-                ),
-                return_grid_coord=True,
-            ),
+            #dict(type="HueSaturationTranslation", hue_max=0.2, saturation_max=0.2),
+            #dict(type="RandomColorDrop", p=0.2, color_augment=0.0),
+            dict(type="NormalizeCoord"),
+            #dict(
+            #    type="GridSample",
+            #    grid_size=0.02,
+            #    hash_type="fnv",
+            #    mode="train",
+            #    keys=(
+            #        "coord",
+            #        "sh",
+            #        "opacity",
+            #        "quat",
+            #        "scale",
+            #        "segment",
+            #        "lang_feat",
+            #        "valid_feat_mask",
+            #    ),
+            #    return_grid_coord=True,
+            #),
             #dict(type="SphereCrop", point_max=50000, mode="center"),
-            dict(type="CenterShift", apply_z=False),
-            dict(type="NormalizeColor"),
-            # dict(type="NormalizeCoord"),
+            #dict(type="CenterShift", apply_z=False),
+            #dict(type="NormalizeColor"),
             # dict(type="ShufflePoint"),
             dict(type="ToTensor"),
+            #dict(type="NormalizeOpacities"),
+            #dict(type="NormalizeScales"),
             dict(
                 type="Collect",
                 keys=(
@@ -81,34 +147,35 @@ transform_train=[
                     "valid_feat_mask",
                     "pc_coord",
                     "pc_segment",
+                    "label"
                 ),
-                feat_keys=("color", "opacity", "quat", "scale"),
+                feat_keys=features
             ),
         ]
     
-transform_test = transform=[
-            dict(type="CenterShift", apply_z=True),
-            dict(
-                type="GridSample",
-                grid_size=0.015,
-                hash_type="fnv",
-                mode="train",
-                keys=(
-                    "coord",
-                    "color",
-                    "opacity",
-                    "quat",
-                    "scale",
-                    "segment",
-                    "lang_feat",
-                    "valid_feat_mask",
-                ),
-                return_grid_coord=True,
-            ),
-            # dict(type="SphereCrop", point_max=600000, mode="random"), # spconv limitation: int64_t(N) * int64_t(C) * tv::bit_size(algo_desp.dtype_a) / 8 < int_max, i.e., max 698k points for inference
-            dict(type="CenterShift", apply_z=False),
-            dict(type="NormalizeColor"),
+transform_test =[
+            #dict(type="NormalizeColor"),
+            dict(type="NormalizeCoord"),
+            #dict(
+            #    type="GridSample",
+            #    grid_size=0.02,
+            #    hash_type="fnv",
+            #    mode="train",
+            #    keys=(
+            #        "coord",
+            #        "sh",
+            #        "opacity",
+            #        "quat",
+            #        "scale",
+            #        "segment",
+            #        "lang_feat",
+            #        "valid_feat_mask",
+            #    ),
+            #    return_grid_coord=True,
+            #),
             dict(type="ToTensor"),
+            #dict(type="NormalizeOpacities"),
+            #dict(type="NormalizeScales"),
             dict(
                 type="Collect",
                 keys=(
@@ -119,14 +186,15 @@ transform_test = transform=[
                     "valid_feat_mask",
                     "pc_coord",
                     "pc_segment",
+                    "label"
                 ),
-                feat_keys=("color", "opacity", "quat", "scale"),
+                feat_keys=features
             ),
         ]
 
 
-train_data = DefaultDataset(split="train", transform=transform_train)
-test_data = DefaultDataset(split="test", transform=transform_test)
+train_data = DefaultDataset(split="train", transform=transform_train, configuration=args.config)
+test_data = DefaultDataset(split="test", transform=transform_test, configuration=args.config)
 
 train_loader = torch.utils.data.DataLoader(
             train_data,
@@ -137,6 +205,8 @@ train_loader = torch.utils.data.DataLoader(
             pin_memory=True,
             drop_last=True,
             persistent_workers=True,
+            worker_init_fn=seed_worker,
+            generator=torch.Generator().manual_seed(manualSeed),
         )
 
 test_loader = torch.utils.data.DataLoader(
@@ -148,6 +218,8 @@ test_loader = torch.utils.data.DataLoader(
             pin_memory=True,
             drop_last=True,
             persistent_workers=True,
+            worker_init_fn=seed_worker,
+            generator=torch.Generator().manual_seed(manualSeed),
         )
 
 
@@ -155,36 +227,73 @@ test_loader = torch.utils.data.DataLoader(
 order=("z", "z-trans")
 shuffle_orders=True
 
-model = PointTransformerV3(in_channels=11, 
-                           enable_flash=False, 
-                           order=order, 
-                           shuffle_orders=shuffle_orders,
-                           enc_depths=(2, 2, 2, 4, 2),
-                           enc_channels=(32, 64, 128, 256, 384),
-                           enc_num_head=(2, 4, 8, 8, 12),
-                           enc_patch_size=(256, 256, 256, 256, 256),
-                           dec_depths=(2, 2, 2, 2),
-                           dec_channels=(64, 128, 128, 256),
-                           dec_num_head=(4, 4, 8, 8),
-                           dec_patch_size=(256, 256, 256, 256),
-                           cls_mode=True)
+"""
+model = PointTransformerV3(
+    in_channels=56,
+    enable_flash=False,
+    order=order,
+    shuffle_orders=shuffle_orders,
+    enc_depths=(2,2,2,4,2),
+    enc_channels=(32,64,128,256,384),
+    enc_num_head=(2,4,8,8,12),
+    enc_patch_size=(256,256,256,256,256),
+    dec_depths=(2,2,2,2),
+    dec_channels=(64,128,128,256),
+    dec_num_head=(4,4,8,8),
+    dec_patch_size=(256,256,256,256),
+    cls_mode=True
+)
 model = model.cuda()
+"""
+model = PointTransformerV3(
+    in_channels=num_feat,
+    enable_flash=False,
+    order=("z", "z-trans"),
+    shuffle_orders=False,
+
+    enc_depths=(1, 1, 2, 2),
+    enc_channels=(32, 64, 128, 128),
+    enc_num_head=(2, 4, 4, 4),
+    enc_patch_size=(32, 32, 32, 32),
+
+    stride=(1, 2, 2), 
+
+    dec_depths=(1, 1),
+    dec_channels=(64, 128),
+    dec_num_head=(2, 4),
+    dec_patch_size=(16, 16),
+
+    cls_mode=True
+).cuda()
+
 
 from transform import to_device
 
 criterion = nn.CrossEntropyLoss()
-optimizer = torch.optim.AdamW(list(model.parameters()), lr=1e-4, weight_decay=1e-4)
 
+lr = 1e-4
+if args.resume is not None:
+    checkpoint = torch.load(args.resume)
+    model.load_state_dict(checkpoint['model'])
+    lr = checkpoint['lr']
+optimizer = torch.optim.AdamW(list(model.parameters()), lr=lr, weight_decay=1e-4)
 
-#model.load_state_dict(torch.load("point_transformer.pth"))
+if args.resume:
+    optimizer.load_state_dict(checkpoint['optimizer'])
+
 
 
 device = "cuda:0"
 
 epochs = args.epochs
 
+if args.resume:
+    start = checkpoint['epoch']+1
+else:
+    start = 0
+
 with wandb.init(project=project, config=config) as run:
-    for e in range(epochs):
+    for e in range(start, epochs):
 
         progress_bar = tqdm(total=len(train_loader))
         it = 0
@@ -204,17 +313,6 @@ with wandb.init(project=project, config=config) as run:
             
             out = model(data)
 
-
-            """
-            scenes = [] 
-            value = torch.max(batch) 
-            for i in range(value+1): 
-                mask = (batch==i) 
-                feat_i = feat[mask] 
-                scenes.append(torch.mean(feat_i, dim=0, keepdim=False)) 
-                scenes = torch.stack(scenes)
-            """
-            
             loss = criterion(out, label)
             
             it += 1
@@ -226,9 +324,14 @@ with wandb.init(project=project, config=config) as run:
             progress_bar.update(1)
             progress_bar.set_postfix({"Loss": total_loss/it})
             
-        run.log({"loss": total_loss/it})
+        
 
-        torch.save(model.state_dict(), f"checkpoints/{run.name[:-3]}_{e}.pth")
+        torch.save({'epoch': e,
+                    'lr': lr,
+                    'optimizer': optimizer.state_dict(),
+            'model':model.state_dict()}, f"checkpoints/{args.name}_{e}.pth")
+        
+        run.log({"loss": total_loss/it})
 
 
         progress_bar = tqdm(total=len(test_loader))
