@@ -27,7 +27,6 @@ We used the second one in model training. Make sure to extract gaussian_pickles.
 You can also download the first version of the dataset for further experiments. 
 
 
-```
 
 ## 3. Training
 
@@ -41,7 +40,7 @@ python -u train.py -bs 4 -e 8 --config mixed_training.pkl --name new_mixed --res
 - `--name`: Name of the training.
 - `--resume`: Checkpoint from which to resume training.
 
-## 3. Testing 
+## 4. Testing 
 
 To test the model, download the corresponding pretrained weights [HERE]() 
 and place them in the folder:
