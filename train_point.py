@@ -8,7 +8,7 @@ import numpy as np
 import random
 import argparse
 from point_transformer import PointTransformerV3
-import wandb
+import pandas as pd
 
 print(f"Device: {torch.cuda.get_device_name(0)}")
 
@@ -66,6 +66,7 @@ else:
 
 
 
+
 bs = args.batch_size
 print(f"Running  {args.name}")
 # set seed
@@ -76,16 +77,9 @@ np.random.seed(manualSeed)
 torch.cuda.manual_seed_all(manualSeed)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
-torch.use_deterministic_algorithms(True)
 
+logs = {"epoch" : [], "loss" :[], "accuracy":[]}
 
-def seed_worker(worker_id):
-    worker_seed = manualSeed + worker_id
-    np.random.seed(worker_seed)
-    random.seed(worker_seed)
-    torch.manual_seed(worker_seed)
-
-project="fake_gaussian"
 config = {
     "learning_rate": 1e-4,
     "architecture": "PointTransformerv3+MLP",
@@ -104,39 +98,8 @@ transform_train=[
             dict(type="RandomRotate", angle=[-1 / 64, 1 / 64], axis="x", p=0.5),
             dict(type="RandomRotate", angle=[-1 / 64, 1 / 64], axis="y", p=0.5),
             dict(type="RandomShift", shift=[[-0.2, 0.2], [-0.2, 0.2], [0, 0]]),
-            #dict(type="RandomFlip", p=0.5),
-            #dict(type="RandomJitter", sigma=0.005, clip=0.01),
-            #dict(type="ElasticDistortion", distortion_params=[[0.2, 0.4], [0.8, 1.6]]),
-            #dict(type="ChromaticAutoContrast", p=0.2, blend_factor=None),
-            #dict(type="ChromaticTranslation", p=0.95, ratio=0.1),
-            #dict(type="ChromaticJitter", p=0.95, std=0.05),
-            #dict(type="HueSaturationTranslation", hue_max=0.2, saturation_max=0.2),
-            #dict(type="RandomColorDrop", p=0.2, color_augment=0.0),
             dict(type="NormalizeCoord"),
-            #dict(
-            #    type="GridSample",
-            #    grid_size=0.02,
-            #    hash_type="fnv",
-            #    mode="train",
-            #    keys=(
-            #        "coord",
-            #        "sh",
-            #        "opacity",
-            #        "quat",
-            #        "scale",
-            #        "segment",
-            #        "lang_feat",
-            #        "valid_feat_mask",
-            #    ),
-            #    return_grid_coord=True,
-            #),
-            #dict(type="SphereCrop", point_max=50000, mode="center"),
-            #dict(type="CenterShift", apply_z=False),
-            #dict(type="NormalizeColor"),
-            # dict(type="ShufflePoint"),
             dict(type="ToTensor"),
-            #dict(type="NormalizeOpacities"),
-            #dict(type="NormalizeScales"),
             dict(
                 type="Collect",
                 keys=(
@@ -154,28 +117,8 @@ transform_train=[
         ]
     
 transform_test =[
-            #dict(type="NormalizeColor"),
             dict(type="NormalizeCoord"),
-            #dict(
-            #    type="GridSample",
-            #    grid_size=0.02,
-            #    hash_type="fnv",
-            #    mode="train",
-            #    keys=(
-            #        "coord",
-            #        "sh",
-            #        "opacity",
-            #        "quat",
-            #        "scale",
-            #        "segment",
-            #        "lang_feat",
-            #        "valid_feat_mask",
-            #    ),
-            #    return_grid_coord=True,
-            #),
             dict(type="ToTensor"),
-            #dict(type="NormalizeOpacities"),
-            #dict(type="NormalizeScales"),
             dict(
                 type="Collect",
                 keys=(
@@ -204,9 +147,7 @@ train_loader = torch.utils.data.DataLoader(
             collate_fn=partial(point_collate_fn),
             pin_memory=True,
             drop_last=True,
-            persistent_workers=True,
-            worker_init_fn=seed_worker,
-            generator=torch.Generator().manual_seed(manualSeed),
+            persistent_workers=True
         )
 
 test_loader = torch.utils.data.DataLoader(
@@ -216,10 +157,9 @@ test_loader = torch.utils.data.DataLoader(
             num_workers=8,
             collate_fn=partial(point_collate_fn),
             pin_memory=True,
-            drop_last=True,
-            persistent_workers=True,
-            worker_init_fn=seed_worker,
-            generator=torch.Generator().manual_seed(manualSeed),
+            drop_last=False,
+            persistent_workers=True
+
         )
 
 
@@ -249,7 +189,7 @@ model = PointTransformerV3(
     in_channels=num_feat,
     enable_flash=False,
     order=("z", "z-trans"),
-    shuffle_orders=False,
+    shuffle_orders=True,
 
     enc_depths=(1, 1, 2, 2),
     enc_channels=(32, 64, 128, 128),
@@ -273,9 +213,11 @@ criterion = nn.CrossEntropyLoss()
 
 lr = 1e-4
 if args.resume is not None:
-    checkpoint = torch.load(args.resume)
+    checkpoint = torch.load(f"checkpoints/{args.resume}")
     model.load_state_dict(checkpoint['model'])
     lr = checkpoint['lr']
+    logs = pd.read_csv(f"{args.name}.csv").to_dict(orient="list")
+
 optimizer = torch.optim.AdamW(list(model.parameters()), lr=lr, weight_decay=1e-4)
 
 if args.resume:
@@ -292,12 +234,10 @@ if args.resume:
 else:
     start = 0
 
-with wandb.init(project=project, config=config) as run:
-    for e in range(start, epochs):
+for e in range(start, epochs):
 
         progress_bar = tqdm(total=len(train_loader))
         it = 0
-        
         
         model.train()
 
@@ -331,7 +271,7 @@ with wandb.init(project=project, config=config) as run:
                     'optimizer': optimizer.state_dict(),
             'model':model.state_dict()}, f"checkpoints/{args.name}_{e}.pth")
         
-        run.log({"loss": total_loss/it})
+        train_loss = total_loss/it
 
 
         progress_bar = tqdm(total=len(test_loader))
@@ -358,7 +298,13 @@ with wandb.init(project=project, config=config) as run:
                 progress_bar.set_postfix({"Test Acc": correct/total})
                 
 
-        run.log({"accuracy": correct/total})
-                
+        test_acc = correct/total
+        
+        logs["epoch"].append(e + 1)
+        logs["loss"].append(train_loss)
+        logs["accuracy"].append(test_acc)
+        df = pd.DataFrame(logs)
+        df.to_csv(f"{args.name}.csv", index=False)
+
             
         print("Final Test Acc:", correct/total)

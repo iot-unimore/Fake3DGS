@@ -1,0 +1,14 @@
+gaussian_pickles/*
+wandb/*
+__pycache__/
+*.ipynb
+logs/*
+checkpoints/*
+*.csv
+old_weights/*
+old_code/*
+extract_test.py
+*.tar.gz
+*.pkl
+*.sh
+*nosh.py

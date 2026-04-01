@@ -25,6 +25,8 @@ except ImportError:
 from serialization import encode
 
 
+
+
 @torch.inference_mode()
 def offset2bincount(offset):
     return torch.diff(
@@ -43,6 +45,37 @@ def offset2batch(offset):
 @torch.inference_mode()
 def batch2offset(batch):
     return torch.cumsum(batch.bincount(), dim=0).long()
+
+
+def deterministic_batch_average(feat, batch):
+    """
+    Calcola la media per batch in modo deterministico anche su GPU.
+    
+    Args:
+        feat: tensor [N, C] delle features dei punti
+        batch: tensor [N] con gli indici di batch
+    
+    Returns:
+        Tensor [num_groups, C] con media per batch
+    """
+    num_groups = batch.max().item() + 1
+
+    # Ordina gli indici per batch
+    sorted_idx = torch.argsort(batch, stable=True)
+    batch_sorted = batch[sorted_idx]
+    feat_sorted = feat[sorted_idx]
+
+    # Conta quanti elementi per ogni batch
+    counts = torch.bincount(batch_sorted, minlength=num_groups).unsqueeze(-1)
+
+    # Somma in ordine deterministico
+    scenes = torch.zeros(num_groups, feat.size(1), dtype=feat.dtype, device=feat.device)
+    scenes.index_add_(0, batch_sorted, feat_sorted)
+
+    # Media
+    scenes = scenes / counts
+
+    return scenes
 
 
 class Point(Dict):
@@ -989,7 +1022,7 @@ class PointTransformerV3(PointModule):
         scenes.index_add_(0, point["batch"], point["feat"])
         counts.index_add_(0, point["batch"], ones)
         point = scenes / counts.unsqueeze(-1)
-
+        #point = deterministic_batch_average(point["feat"], point["batch"])
         point = self.head(point)
 
 
