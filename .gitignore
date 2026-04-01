@@ -9,6 +9,5 @@ old_weights/*
 old_code/*
 extract_test.py
 *.tar.gz
-*.pkl
 *.sh
 *nosh.py

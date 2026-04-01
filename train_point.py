@@ -47,7 +47,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("-bs","--batch_size", type=int, default=2)
 parser.add_argument("-e","--epochs", type=int, default=10)
 parser.add_argument("-r", "--resume", type=str, default=None, help="Path del checkpoint")
-parser.add_argument("-c", "--config", type=str, default="mixed_training.pkl", help="Experiment type")
+parser.add_argument("-c", "--config", type=str, default="splits/mixed_training.pkl", help="Experiment type")
 parser.add_argument("-n", "--name", type=str, default=None, help="Name of the run")
 parser.add_argument("-a", "--ablative", type=str, default=None )
 
