@@ -16,7 +16,7 @@ conda env create -f environment.yml
 
 ```
 
-### Download the dataset
+## 2. Download the dataset
 
 Download the dataset [HERE]()
 There are two versions of the dataset:
@@ -33,6 +33,7 @@ You can also download the first version of the dataset for further experiments.
 ```
 python -u train.py -bs 4 -e 8 --config mixed_training.pkl --name new_mixed --resume new_mixed_5.pth
 ```
+
 ### Explanation of Parameters:
 - `--bs` : Batch size.
 - `-e` : Number of epochs.
