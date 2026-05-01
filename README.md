@@ -1,6 +1,6 @@
 # Fake3DGS
 
-This is the official PyTorch implementation of the paper *"[Fake3DGS: A Benchmark for 3D Manipulation Detection in Neural Rendering](https://arxiv.org/)"* (ICPR 2026).
+This is the official PyTorch implementation of the paper *"[Fake3DGS: A Benchmark for 3D Manipulation Detection in Neural Rendering](https://arxiv.org/abs/2604.27590)"* (ICPR 2026).
 
 <img src="imgs/renderings.png" alt="" style="zoom: 60%;" />
 
@@ -18,14 +18,14 @@ conda env create -f environment.yml
 
 ## 2. Download the dataset
 
-Download the dataset [HERE]()
-There are two versions of the dataset:
-- The first one contains nerfstudio checkpoints compressed.
-- The second one contains each gaussian splats extracted features inside a pkl file. 
+Download the dataset [original_samples](https:/ailb-web.ing.unimore.it/publicfiles/gbData/Fake3DGS/dataset/original_compressed.zip)[edited_samples](https:/ailb-web.ing.unimore.it/publicfiles/gbData/Fake3DGS/dataset/fake_compressed.zip)
+The dataset contains nerfstudio checkpoints compressed. 
+You need to preprocess the data with extract_data.py file to extract each gaussian splats features inside a pkl file, according to our experimentation. 
   
-We used the second one in model training. Make sure to extract gaussian_pickles.tar.gz inside this folder.
-You can also download the first version of the dataset for further experiments. 
+```
+python extract_data.py --input_dir root/Fake3DGS/original_compressed/ --output_dir gaussian_pickels/real --label 0 #1 if fake
 
+```
 
 
 ## 3. Training
@@ -43,7 +43,7 @@ python -u train.py -bs 4 -e 8 --config mixed_training.pkl --name new_mixed --res
 
 ## 4. Testing 
 
-To test the model, download the corresponding pretrained weights [HERE]() 
+To test the model, download the corresponding pretrained weights [HERE](https://ailb-web.ing.unimore.it/publicfiles/gbData/Fake3DGS/checkpoint.pth) 
 and place them in the folder:
 
 ```

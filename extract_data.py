@@ -6,7 +6,7 @@ import numpy as np
 from pathlib import Path
 from tqdm import tqdm
 from typing import Dict, Any, Optional
-
+import argparse
 from decompress import PngCompression
 
 
@@ -76,13 +76,60 @@ class SceneProcessor:
             self.load_scene(scene_path, crop_to=crop_to)
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Process Gaussian data")
+
+    parser.add_argument(
+        "--input_dir",
+        type=str,
+        required=True,
+        help="Path to input folder (compressed)"
+    )
+
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        required=True,
+        help="Path to output folder",
+        default="./gaussian_pickles"
+    )
+
+    parser.add_argument(
+        "--label",
+        type=int,
+        choices=[0, 1],
+        required=True,
+        help="0 = Real, 1 = Fake"
+    )
+
+    parser.add_argument(
+        "--crop_to",
+        type=int,
+        default=None,
+        help="Crop dimension (e.g., 65536). Default: None"
+    )
+
+    parser.add_argument(
+        "--start_index",
+        type=int,
+        default=0,
+        help="Starting index for processing scenes. Default: 0"
+    )
+
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
+    args = parse_args()
+
     CONFIG = {
-        "input_dir": "/PATH/TO/original_compressed", #"/PATH/TO/fake_compressed"
-        "output_dir": "./gaussian_pickles/real", #"./gaussian_pickles/fake"
-        "label": 0, #0 for Real, 1 for Fake
-        "crop_to": None,  # es: 65536
+        "input_dir": args.input_dir,
+        "output_dir": args.output_dir,
+        "label": args.label,
+        "crop_to": args.crop_to,
+        "start_index": args.start_index
     }
+    
 
     processor = SceneProcessor(
         input_dir=CONFIG["input_dir"],
