@@ -19,7 +19,7 @@ conda env create -f environment.yml
 ## 2. Download the dataset
 
 Download the dataset:
-[original_samples](https:/ailb-web.ing.unimore.it/publicfiles/gbData/Fake3DGS/dataset/original_compressed.zip) | [edited_samples](https:/ailb-web.ing.unimore.it/publicfiles/gbData/Fake3DGS/dataset/fake_compressed.zip)
+[original_samples](https://ailb-web.ing.unimore.it/publicfiles/gbData/Fake3DGS/dataset/original_compressed.zip) | [edited_samples](https://ailb-web.ing.unimore.it/publicfiles/gbData/Fake3DGS/dataset/fake_compressed.zip)
 
 The dataset contains nerfstudio checkpoints compressed. 
 You need to preprocess the data with extract_data.py file to extract each gaussian splats features inside a pkl file, according to our experimentation. 
